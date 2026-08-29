@@ -376,7 +376,7 @@ The EPPO Global Database is published by EPPO under its own terms. This package 
 
 ## Credits
 
-Built for [Atlas Core](https://github.com/atlasflow) and released for general use. Endpoint coverage is derived from EPPO's own OpenAPI document, vendored at `resources/openapi.yml`, and corrected against the live API where the two disagree.
+Built for [Atlas Core](https://atlascore.cloud) and released for general use. Endpoint coverage is derived from EPPO's own OpenAPI document, vendored at `resources/openapi.yml`, and corrected against the live API where the two disagree.
 
 `tests/Live` holds contract tests that run against the real database. They are skipped unless you give them a key:
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 — unreleased
+## 0.1.0 — 2026-08-29
 
 First release. Covers every endpoint in EPPO Global Database API v2.0.4:
 taxa, countries, RPPOs, the Reporting Service, reference tables and the search

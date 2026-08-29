@@ -1,0 +1,89 @@
+{
+    "$schema": "https://getcomposer.org/schema.json",
+    "name": "atlasflow/laravel-eppo",
+    "description": "Laravel client for the EPPO Global Database (data.eppo.int) with a durable, self-invalidating local cache.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "laravel",
+        "eppo",
+        "eppo-code",
+        "plant-protection",
+        "phytosanitary",
+        "taxonomy",
+        "pest",
+        "quarantine",
+        "agriculture",
+        "horticulture"
+    ],
+    "homepage": "https://github.com/atlasflow/laravel-eppo",
+    "authors": [
+        {
+            "name": "Atlasflow",
+            "homepage": "https://github.com/atlasflow"
+        }
+    ],
+    "require": {
+        "php": "^8.3",
+        "ext-json": "*",
+        "illuminate/bus": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/cache": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/console": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/contracts": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/database": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/http": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/queue": "^11.0 || ^12.0 || ^13.0",
+        "illuminate/support": "^11.0 || ^12.0 || ^13.0"
+    },
+    "require-dev": {
+        "laravel/pint": "^1.18",
+        "orchestra/testbench": "^9.0 || ^10.0 || ^11.0",
+        "pestphp/pest": "^3.0 || ^4.0",
+        "phpstan/phpstan": "^2.0"
+    },
+    "suggest": {
+        "ext-zlib": "Enables gzip compression of durable cache payloads (config: eppo.cache.durable.compress)."
+    },
+    "autoload": {
+        "psr-4": {
+            "Atlasflow\\Eppo\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Atlasflow\\Eppo\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Atlasflow\\Eppo\\EppoServiceProvider"
+            ],
+            "aliases": {
+                "Eppo": "Atlasflow\\Eppo\\Facades\\Eppo"
+            }
+        }
+    },
+    "scripts": {
+        "test": "@php vendor/bin/pest",
+        "lint": "@php vendor/bin/pint --parallel",
+        "lint:check": "@php vendor/bin/pint --parallel --test",
+        "analyse": "@php vendor/bin/phpstan analyse",
+        "ci:check": [
+            "Composer\\Config::disableProcessTimeout",
+            "@lint:check",
+            "@analyse",
+            "@php vendor/bin/pest --ci"
+        ]
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Atlasflow\Eppo\Console;
 
 use Atlasflow\Eppo\Cache\CacheManager;
+use Atlasflow\Eppo\Console\Concerns\RequiresCache;
 use Atlasflow\Eppo\Eppo;
 use Atlasflow\Eppo\Exceptions\EppoException;
 use Atlasflow\Eppo\Http\Endpoint;
@@ -19,6 +20,8 @@ use Illuminate\Console\Command;
  */
 final class CacheWarmCommand extends Command
 {
+    use RequiresCache;
+
     protected $signature = 'eppo:cache:warm
         {codes?* : EPPO codes to warm (default: every code already in the cache)}
         {--file= : Read codes from a file, one per line}
@@ -30,6 +33,10 @@ final class CacheWarmCommand extends Command
 
     public function handle(Eppo $eppo, CacheManager $cache): int
     {
+        if ($this->cacheIsOff($cache)) {
+            return self::FAILURE;
+        }
+
         if ($this->option('references')) {
             $this->warmReferences($eppo);
         }

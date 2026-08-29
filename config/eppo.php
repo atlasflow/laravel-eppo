@@ -81,15 +81,22 @@ return [
     | Cache
     |--------------------------------------------------------------------------
     |
-    | Two tiers sit in front of the API:
+    | Caching is OFF by default. Every read goes to EPPO until you turn it on:
+    |
+    |     EPPO_CACHE=true
+    |     php artisan vendor:publish --tag=eppo-migrations
+    |     php artisan migrate
+    |
+    | Once on, two tiers sit in front of the API:
     |
     |   L1  a normal Laravel cache store — short TTL, absorbs repeated reads
     |       inside a request or between nearby requests.
-    |   L2  the durable store — a database table meant to be kept for years.
-    |       EPPO codes are effectively immutable, so entries default to never
-    |       hard-expiring; they go *stale* and are revalidated, not evicted.
+    |   L2  the durable store — a table in your database (`eppo_cache_entries`
+    |       by default) meant to be kept for years. EPPO codes are effectively
+    |       immutable, so rows never hard-expire; they go *stale* and are
+    |       revalidated, not evicted.
     |
-    | A read that finds a stale L2 entry returns it immediately and queues a
+    | A read that finds a stale L2 row returns it immediately and queues a
     | refresh (stale-while-revalidate), so a user request never pays for a
     | revalidation. See `eppo:sync` for change-driven invalidation.
     |
@@ -97,7 +104,11 @@ return [
 
     'cache' => [
 
-        'enabled' => (bool) env('EPPO_CACHE', true),
+        /*
+         | The master switch. False means no caching of any kind, and no
+         | database table is needed or created.
+         */
+        'enabled' => (bool) env('EPPO_CACHE', false),
 
         /*
          | Bump this to orphan every existing entry at once — the version is
@@ -113,6 +124,12 @@ return [
             'ttl' => (int) env('EPPO_CACHE_L1_TTL', 3600), // seconds
         ],
 
+        /*
+         | The durable tier: two tables in your database. Point them at another
+         | connection, or rename them, if they collide with something you own.
+         | Migrations are only registered while `enabled` is true above and
+         | here — nothing is created for an application that does not cache.
+         */
         'durable' => [
             'enabled' => (bool) env('EPPO_CACHE_DURABLE', true),
             'connection' => env('EPPO_CACHE_CONNECTION'), // null = default connection

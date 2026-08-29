@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Atlasflow\Eppo\Console;
 
+use Atlasflow\Eppo\Cache\CacheManager;
+use Atlasflow\Eppo\Console\Concerns\RequiresCache;
 use Atlasflow\Eppo\Data\TaxonListItem;
 use Atlasflow\Eppo\Eppo;
 use Atlasflow\Eppo\Sync\ChangeSync;
@@ -14,6 +16,8 @@ use Illuminate\Console\Command;
  */
 final class SyncCommand extends Command
 {
+    use RequiresCache;
+
     protected $signature = 'eppo:sync
         {--since= : Look for changes from this date onwards (default: where the last run finished)}
         {--refresh : Re-fetch each invalidated resource instead of leaving a hole}
@@ -22,8 +26,12 @@ final class SyncCommand extends Command
 
     protected $description = 'Ask EPPO which codes changed and invalidate only those cache entries';
 
-    public function handle(ChangeSync $sync): int
+    public function handle(ChangeSync $sync, CacheManager $cache): int
     {
+        if ($this->cacheIsOff($cache)) {
+            return self::FAILURE;
+        }
+
         $since = $this->option('since');
         $from = $sync->resolveSince(is_string($since) ? $since : null);
 

@@ -2,7 +2,9 @@
 
 A Laravel client for the [EPPO Global Database](https://gd.eppo.int) — the European and Mediterranean Plant Protection Organization's register of plants, pests, pathogens and their regulatory status — backed by a durable local cache.
 
-EPPO codes are stable identifiers. `BEMITA` has meant *Bemisia tabaci* since 2002 and will still mean it in twenty years. A cache in front of that data should be measured in months, not minutes, and should survive a Redis restart, a deploy, and a machine rebuild. That is what this package gives you: a database-backed store that never expires by default, revalidates in the background, and is invalidated by asking EPPO what actually changed.
+EPPO codes are stable identifiers. `BEMITA` has meant *Bemisia tabaci* since 2002 and will still mean it in twenty years. A cache in front of that data should be measured in months, not minutes, and should survive a Redis restart, a deploy, and a machine rebuild. So the optional cache here is **a table in your own database** — it never expires by default, revalidates in the background, and is invalidated by asking EPPO what actually changed.
+
+Caching is off until you turn it on. Out of the box this is a plain API client with no tables and no migrations.
 
 ```php
 use Atlasflow\Eppo\Facades\Eppo;
@@ -23,12 +25,24 @@ Eppo::country('FR')->categorization();            // everything France regulates
 
 ```bash
 composer require atlasflow/laravel-eppo
-php artisan migrate
 ```
 
 ```dotenv
 EPPO_API_KEY=your-token
 ```
+
+That is a working client. To add the durable cache:
+
+```dotenv
+EPPO_CACHE=true
+```
+
+```bash
+php artisan vendor:publish --tag=eppo-migrations
+php artisan migrate
+```
+
+The migrations are only registered while `EPPO_CACHE=true`, so an application that does not cache never grows a table it did not ask for.
 
 The config file is optional:
 
@@ -140,14 +154,27 @@ It goes through the same cache, throttle and retry logic as everything else.
 
 ## The cache
 
-Two tiers sit in front of the API.
+Off by default. `EPPO_CACHE=true` turns on two tiers in front of the API.
 
 | | Where | Lifetime | Purpose |
 |---|---|---|---|
 | **L1** | any Laravel cache store | 1 hour | absorbs repeated reads |
-| **L2** | `eppo_cache_entries` table | forever | the durable copy |
+| **L2** | a table in your database | forever | the durable copy |
 
 A read tries L1, then L2, then EPPO. A write fills both.
+
+The durable tier is two ordinary tables you own — `eppo_cache_entries` and `eppo_sync_state` — and you decide where they live:
+
+```dotenv
+EPPO_CACHE=true
+EPPO_CACHE_TABLE=eppo_cache_entries
+EPPO_CACHE_SYNC_TABLE=eppo_sync_state
+EPPO_CACHE_CONNECTION=          # blank = your default connection
+EPPO_CACHE_DURABLE=true         # false = L1 only, nothing persisted
+EPPO_CACHE_COMPRESS=false       # gzip payloads; roughly halves the table
+```
+
+Both migrations read those names from config, so renaming works before or after you migrate. `Atlasflow\Eppo\Cache\Models\EppoCacheEntry` is an ordinary Eloquent model over the table if you want to report on it.
 
 Durable entries carry two independent clocks:
 
@@ -304,7 +331,44 @@ Http::fake(['*' => Http::response(['eppocode' => 'BEMITA', 'prefname' => 'Bemisi
 expect(Eppo::taxon('BEMITA')->overview()->prefname)->toBe('Bemisia tabaci');
 ```
 
-To take the cache out of the picture entirely, set `EPPO_CACHE=false`.
+The cache is off by default, so tests see the network layer unless you turn it on.
+
+## Environment reference
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `EPPO_API_KEY` | — | required; from data.eppo.int |
+| `EPPO_BASE_URL` | `https://api.eppo.int/gd/v2` | primary server |
+| `EPPO_FALLBACK_URLS` | — | comma-separated, tried on connection or 5xx failure |
+| `EPPO_TIMEOUT` / `EPPO_CONNECT_TIMEOUT` | `15` / `5` | seconds |
+| `EPPO_RETRY_TIMES` | `3` | attempts for 429, 5xx and connection errors |
+| `EPPO_THROTTLE` | `true` | local rate limiter |
+| `EPPO_THROTTLE_MAX` / `EPPO_THROTTLE_WINDOW` | `1800` / `10` | requests per window, seconds |
+| **`EPPO_CACHE`** | **`false`** | **master switch; nothing is cached or migrated until this is true** |
+| `EPPO_CACHE_VERSION` | `v1` | bump to orphan every entry at once |
+| `EPPO_CACHE_DURABLE` | `true` | the database tier |
+| `EPPO_CACHE_CONNECTION` | default | which database connection holds the tables |
+| `EPPO_CACHE_TABLE` | `eppo_cache_entries` | the durable table |
+| `EPPO_CACHE_SYNC_TABLE` | `eppo_sync_state` | sync high-water mark |
+| `EPPO_CACHE_COMPRESS` | `false` | gzip payloads (needs ext-zlib) |
+| `EPPO_CACHE_MISSES` | `true` | persist "no such record" answers |
+| `EPPO_CACHE_L1` / `EPPO_CACHE_L1_STORE` / `EPPO_CACHE_L1_TTL` | `true` / default / `3600` | the hot tier |
+| `EPPO_CACHE_SWR` | `true` | stale-while-revalidate |
+| `EPPO_CACHE_SERVE_STALE` | `true` | serve stale data when EPPO is unreachable |
+| `EPPO_CACHE_KEEP_FOR` | — | seconds until a row may be pruned; blank keeps forever |
+| `EPPO_SYNC_PAGE_SIZE` / `EPPO_SYNC_OVERLAP_DAYS` | `1000` / `2` | change-feed paging and rewind |
+| `EPPO_SYNC_INITIAL_SINCE` | `-1 year` | how far back a first sync looks |
+
+## Where EPPO's API differs from its spec
+
+Verified against the live API on 2026-08-29, and pinned by the live test suite:
+
+- **An unknown but well-formed code answers `400 {"code":400,"error":"Bad request"}`, not 404.** Only the Reporting Service endpoints return 404. Since this package validates code shape before sending, both statuses implement `MissingRecord` — catch that rather than `NotFoundException`, and `exists()` already does.
+- **`/reportings/list` takes undocumented `limit` and `offset`.** Without them you get the first 100 of 510-plus issues; above `limit=1000` the endpoint returns two rows instead of an error, so the client clamps there.
+- **A photo's `tags` is an array**, not a string, and its renditions are named by pixel dimensions (`1024x0`, `220x130`) rather than size words — hence `largest()`, `thumbnail()` and a `url()` that defaults to the widest.
+- **`preferred_name` in a search hit is null** for a name EPPO no longer prefers (`statuscode` `"N"`).
+- **An issue can list the same article twice**; `ReportingIssueDetail` deduplicates by article id.
+- **`/taxons/taxon/{code}/documents` returns `[]`** even when `infos.documents` is non-zero. That is upstream; the endpoint is wired up and will start returning data if EPPO fixes it.
 
 ## Data licence
 
@@ -312,7 +376,13 @@ The EPPO Global Database is published by EPPO under its own terms. This package 
 
 ## Credits
 
-Built for [Atlas Core](https://github.com/atlasflow) and released for general use. Endpoint coverage is generated from EPPO's own OpenAPI document, vendored at `resources/openapi.yml`.
+Built for [Atlas Core](https://github.com/atlasflow) and released for general use. Endpoint coverage is derived from EPPO's own OpenAPI document, vendored at `resources/openapi.yml`, and corrected against the live API where the two disagree.
+
+`tests/Live` holds contract tests that run against the real database. They are skipped unless you give them a key:
+
+```bash
+EPPO_API_KEY=your-token vendor/bin/pest tests/Live
+```
 
 ## Licence
 

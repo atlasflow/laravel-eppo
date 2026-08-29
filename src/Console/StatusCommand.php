@@ -24,9 +24,17 @@ final class StatusCommand extends Command
             $this->components->error('EPPO API unreachable: '.$e->getMessage());
         }
 
+        $this->newLine();
+
+        if (! $cache->enabled()) {
+            $this->components->twoColumnDetail('<fg=gray>Cache</>', '<fg=yellow>disabled</>');
+            $this->components->info('Set EPPO_CACHE=true and run the migrations to enable the durable cache.');
+
+            return self::SUCCESS;
+        }
+
         $stats = $cache->stats();
 
-        $this->newLine();
         $this->components->twoColumnDetail('<fg=gray>Cache version</>', $cache->version());
         $this->components->twoColumnDetail('<fg=gray>Entries</>', number_format($stats['entries']));
         $this->components->twoColumnDetail('<fg=gray>Subjects</>', number_format($stats['subjects']));

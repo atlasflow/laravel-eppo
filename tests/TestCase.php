@@ -33,6 +33,9 @@ abstract class TestCase extends Orchestra
         $app['config']->set('eppo.key', 'test-key');
         $app['config']->set('eppo.base_url', 'https://api.eppo.int/gd/v2');
         $app['config']->set('eppo.throttle.enabled', false);
+
+        // The package ships with caching off; the suite tests it on.
+        $app['config']->set('eppo.cache.enabled', true);
         $app['config']->set('eppo.retry.times', 1);
         $app['config']->set('eppo.retry.base_delay_ms', 1);
     }

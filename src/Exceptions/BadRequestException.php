@@ -4,4 +4,4 @@ declare(strict_types=1);
 
 namespace Atlasflow\Eppo\Exceptions;
 
-class BadRequestException extends RequestException {}
+class BadRequestException extends RequestException implements MissingRecord {}

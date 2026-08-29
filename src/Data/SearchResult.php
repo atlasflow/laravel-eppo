@@ -8,6 +8,9 @@ use Atlasflow\Eppo\Support\Cast;
 
 /**
  * One hit from /tools/search.
+ *
+ * `preferredName` is null when the match is a name EPPO no longer prefers and
+ * has not mapped to a current one — `statuscode` "N" in the raw payload.
  */
 final readonly class SearchResult
 {
@@ -15,7 +18,7 @@ final readonly class SearchResult
         public string $eppocode,
         public string $fullName,
         public bool $isPreferred,
-        public string $preferredName,
+        public ?string $preferredName,
         public ?string $isolang,
         public ?string $language,
         public ?string $statuscode,
@@ -30,7 +33,7 @@ final readonly class SearchResult
             eppocode: Cast::string($data, 'eppocode'),
             fullName: Cast::string($data, 'full_name'),
             isPreferred: Cast::bool($data, 'is_preferred'),
-            preferredName: Cast::string($data, 'preferred_name'),
+            preferredName: Cast::nullableString($data, 'preferred_name'),
             isolang: Cast::nullableString($data, 'isolang'),
             language: Cast::nullableString($data, 'language'),
             statuscode: Cast::nullableString($data, 'statuscode'),

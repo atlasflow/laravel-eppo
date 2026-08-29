@@ -55,19 +55,30 @@ it('reads distribution records', function (): void {
         ->and($distribution->first()->pestStatus)->toBe('Present, widespread');
 });
 
-it('reads photos and picks a rendition', function (): void {
+it('reads photos, keeps the tag list and picks a rendition by width', function (): void {
+    // Shape verified against the live API: tags is an array, and renditions are
+    // named by pixel dimensions rather than by size words.
     Http::fake(['*' => Http::response([[
-        'photo_id' => 12, 'lastmod' => '2020-01-01', 'descinfo' => 'Adults', 'authors' => 'EPPO', 'tags' => 'adult',
+        'photo_id' => 2398,
+        'lastmod' => '2015-01-28 09:19:56.313001',
+        'descinfo' => 'Puparium and larvae',
+        'authors' => 'Varga András',
+        'tags' => ['Pupa', 'Larva'],
         'files' => [
-            ['size' => 'thumb', 'url' => 'https://gd.eppo.int/thumb.jpg'],
-            ['size' => 'large', 'url' => 'https://gd.eppo.int/large.jpg'],
+            ['size' => '1024x0', 'url' => 'https://gd.eppo.int/1024x0/2398.jpg'],
+            ['size' => '220x130', 'url' => 'https://gd.eppo.int/220x130/2398.jpg'],
         ],
     ]])]);
 
     $photo = eppo()->taxon('BEMITA')->photos()->first();
 
-    expect($photo->url('large'))->toBe('https://gd.eppo.int/large.jpg')
-        ->and($photo->url('missing-size'))->toBe('https://gd.eppo.int/thumb.jpg');
+    expect($photo->tags)->toBe(['Pupa', 'Larva'])
+        ->and($photo->modifiedAt?->format('Y-m-d'))->toBe('2015-01-28')
+        ->and($photo->largest()->size)->toBe('1024x0')
+        ->and($photo->thumbnail()->size)->toBe('220x130')
+        ->and($photo->url())->toBe('https://gd.eppo.int/1024x0/2398.jpg')
+        ->and($photo->url('220x130'))->toBe('https://gd.eppo.int/220x130/2398.jpg')
+        ->and($photo->url('nope'))->toBe('https://gd.eppo.int/1024x0/2398.jpg');
 });
 
 it('reads standards and picks a language', function (): void {
@@ -94,9 +105,33 @@ it('reads reference tables', function (): void {
         ->and(eppo()->references()->pestHostClassifications()->first()->label)->toBe('Major host');
 });
 
+it('pages the reporting service index', function (): void {
+    Http::fake(['*' => Http::response([])]);
+
+    eppo()->reportings()->list(limit: 5000, offset: 10);
+
+    // EPPO answers nonsense above 1000, so the client clamps.
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'limit=1000')
+        && str_contains($request->url(), 'offset=10'));
+});
+
+it('drops the duplicate article rows EPPO returns inside an issue', function (): void {
+    Http::fake(['*' => Http::response([
+        'reporting_id' => 10, 'numrs' => '01', 'datecreate' => '2011-07-06',
+        'repyear' => 2011, 'reference' => 'Rse-2011-01',
+        'articles' => [
+            ['article_id' => 40, 'numarticle' => '003', 'title' => 'New data', 'datecreate' => '2011-07-06 16:13:09.835777', 'lastmodif' => null],
+            ['article_id' => 40, 'numarticle' => '003', 'title' => 'New data', 'datecreate' => '2011-07-06 16:13:09.835777', 'lastmodif' => null],
+            ['article_id' => 52, 'numarticle' => '011', 'title' => 'First report', 'datecreate' => '2011-07-06 17:17:06.628491', 'lastmodif' => null],
+        ],
+    ])]);
+
+    expect(eppo()->reportings()->issue(10)->articles)->toHaveCount(2);
+});
+
 it('reads the reporting service', function (): void {
     Http::fake([
-        '*reportings/list' => Http::response([[
+        '*reportings/list*' => Http::response([[
             'reporting_id' => 1, 'numrs' => '01', 'datecreate' => '2011-01-01',
             'repyear' => 2011, 'reference' => 'Rse-2011-01',
         ]]),
@@ -124,6 +159,15 @@ it('reads the taxonomy chain and the record counts', function (): void {
     expect(eppo()->taxon('BEMITA')->taxonomy()->last()->type)->toBe('Class')
         ->and(eppo()->taxon('BEMITA')->infos()->hosts)->toBe(400)
         ->and(eppo()->taxon('BEMITA')->kingdom()->prefname)->toBe('Animalia');
+});
+
+it('keeps a null preferred name on a deprecated search hit', function (): void {
+    Http::fake(['*' => Http::response([[
+        'eppocode' => 'BEMIAR', 'full_name' => 'Bemisia argentifolii', 'is_preferred' => true,
+        'isolang' => 'la', 'language' => 'Scientific', 'statuscode' => 'N', 'preferred_name' => null,
+    ]])]);
+
+    expect(eppo()->tools()->search('Bemisia')->first()->preferredName)->toBeNull();
 });
 
 it('passes the search mode through', function (): void {

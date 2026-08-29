@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use Atlasflow\Eppo\Exceptions\AuthenticationException;
+use Atlasflow\Eppo\Exceptions\BadRequestException;
 use Atlasflow\Eppo\Exceptions\ConfigurationException;
 use Atlasflow\Eppo\Exceptions\InvalidArgumentException;
+use Atlasflow\Eppo\Exceptions\MissingRecord;
 use Atlasflow\Eppo\Exceptions\NotFoundException;
 use Atlasflow\Eppo\Exceptions\RateLimitException;
 use Atlasflow\Eppo\Tests\Fixtures\Responses;
@@ -76,10 +78,20 @@ it('rejects a search keyword shorter than the API allows without calling out', f
 });
 
 it('turns a 404 into a NotFoundException', function (): void {
-    Http::fake(['*' => Http::response(['error' => 'Not found'], 404)]);
+    Http::fake(['*' => Http::response(['error' => 'Article not found'], 404)]);
 
-    expect(fn () => eppo()->taxon('ZZZZZ')->overview())->toThrow(NotFoundException::class);
-    expect(eppo()->taxon('ZZZZZ')->exists())->toBeFalse();
+    expect(fn () => eppo()->reportings()->article(999999))->toThrow(NotFoundException::class);
+});
+
+it('treats the 400 EPPO returns for an unknown code as a missing record', function (): void {
+    // Verified live: /taxons/taxon/QQQQQQ/overview answers 400 {"code":400,
+    // "error":"Bad request"}, not 404. Shape is validated before we send, so a
+    // 400 can only mean the record is absent.
+    Http::fake(['*' => Http::response(['code' => 400, 'error' => 'Bad request'], 400)]);
+
+    expect(fn () => eppo()->taxon('QQQQQQ')->overview())->toThrow(BadRequestException::class);
+    expect(eppo()->taxon('QQQQQQ')->exists())->toBeFalse();
+    expect(new BadRequestException('x', 400, '/'))->toBeInstanceOf(MissingRecord::class);
 });
 
 it('turns a 401 into an AuthenticationException and does not retry it', function (): void {

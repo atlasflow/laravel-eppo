@@ -11,6 +11,11 @@ use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\Http;
 
 uses(TestCase::class)->in('Feature');
+uses(TestCase::class)->in('Live');
+
+// A stub pattern that stops matching must fail the test, not quietly reach
+// api.eppo.int. Only the Live suite is allowed out.
+beforeEach(fn () => Http::preventStrayRequests())->in('Feature');
 
 function eppo(): Eppo
 {
@@ -59,4 +64,26 @@ function refake(array|Closure $stubs, array $config = []): Eppo
     Http::fake($stubs);
 
     return reconfigure($config);
+}
+
+/**
+ * The live suite talks to api.eppo.int for real. It runs only when a key is
+ * present in the environment, never in CI:
+ *
+ *     EPPO_API_KEY=... vendor/bin/pest --group=live
+ */
+function liveEppo(): Eppo
+{
+    $key = getenv('EPPO_API_KEY') ?: null;
+
+    if ($key === null) {
+        test()->markTestSkipped('Set EPPO_API_KEY to run the live suite.');
+    }
+
+    return reconfigure([
+        'eppo.key' => $key,
+        'eppo.throttle.enabled' => true,
+        'eppo.retry.times' => 3,
+        'eppo.retry.base_delay_ms' => 250,
+    ]);
 }

@@ -4,4 +4,4 @@ declare(strict_types=1);
 
 namespace Atlasflow\Eppo\Exceptions;
 
-class NotFoundException extends RequestException {}
+class NotFoundException extends RequestException implements MissingRecord {}

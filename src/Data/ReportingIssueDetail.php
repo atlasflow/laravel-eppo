@@ -9,6 +9,9 @@ use Illuminate\Support\Collection;
 
 /**
  * A Reporting Service issue together with its article headlines.
+ *
+ * EPPO repeats some article rows within an issue; they are deduplicated by
+ * article id here.
  */
 final readonly class ReportingIssueDetail
 {
@@ -29,6 +32,7 @@ final readonly class ReportingIssueDetail
             issue: ReportingIssue::fromArray($data),
             articles: (new Collection(Cast::arr($data, 'articles')))
                 ->map(fn (mixed $article): ReportingArticle => ReportingArticle::fromArray(is_array($article) ? $article : []))
+                ->unique(fn (ReportingArticle $article): int => $article->articleId)
                 ->values(),
         );
     }

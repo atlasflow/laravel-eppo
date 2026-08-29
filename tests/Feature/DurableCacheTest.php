@@ -5,6 +5,8 @@ declare(strict_types=1);
 use Atlasflow\Eppo\Cache\Models\EppoCacheEntry;
 use Atlasflow\Eppo\Events\CacheHit;
 use Atlasflow\Eppo\Events\StaleEntryServed;
+use Atlasflow\Eppo\Exceptions\BadRequestException;
+use Atlasflow\Eppo\Exceptions\MissingRecord;
 use Atlasflow\Eppo\Exceptions\NotFoundException;
 use Atlasflow\Eppo\Exceptions\ServerException;
 use Atlasflow\Eppo\Jobs\RefreshCacheEntry;
@@ -118,24 +120,25 @@ it('rethrows when EPPO is unreachable and nothing is cached', function (): void 
 });
 
 it('caches an absence so a missing code is not re-requested', function (): void {
-    Http::fake(['*' => Http::response(['error' => 'Not found'], 404)]);
+    Http::fake(['*' => Http::response(['code' => 400, 'error' => 'Bad request'], 400)]);
 
-    expect(fn () => eppo()->taxon('ZZZZZ')->overview())->toThrow(NotFoundException::class);
+    expect(fn () => eppo()->taxon('QQQQQQ')->overview())->toThrow(BadRequestException::class);
 
     cache()->store('array')->clear();
 
-    expect(fn () => eppo()->taxon('ZZZZZ')->overview())->toThrow(NotFoundException::class);
+    // The replay comes from the cache and still reads as "no such record".
+    expect(fn () => eppo()->taxon('QQQQQQ')->overview())->toThrow(NotFoundException::class);
 
     Http::assertSentCount(1);
     expect(EppoCacheEntry::query()->negative()->count())->toBe(1);
 });
 
 it('gives negative entries their own, shorter stale time', function (): void {
-    Http::fake(['*' => Http::response(['error' => 'Not found'], 404)]);
+    Http::fake(['*' => Http::response(['code' => 400, 'error' => 'Bad request'], 400)]);
 
     try {
-        eppo()->taxon('ZZZZZ')->overview();
-    } catch (NotFoundException) {
+        eppo()->taxon('QQQQQQ')->overview();
+    } catch (MissingRecord) {
         // expected
     }
 
@@ -147,11 +150,11 @@ it('gives negative entries their own, shorter stale time', function (): void {
 
 it('does not persist a miss when negative caching is off', function (): void {
     reconfigure(['eppo.cache.durable.cache_misses' => false]);
-    Http::fake(['*' => Http::response(['error' => 'Not found'], 404)]);
+    Http::fake(['*' => Http::response(['code' => 400, 'error' => 'Bad request'], 400)]);
 
     try {
-        eppo()->taxon('ZZZZZ')->overview();
-    } catch (NotFoundException) {
+        eppo()->taxon('QQQQQQ')->overview();
+    } catch (MissingRecord) {
         // expected
     }
 

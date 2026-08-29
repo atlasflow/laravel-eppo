@@ -12,6 +12,7 @@ use Atlasflow\Eppo\Events\EntryInvalidated;
 use Atlasflow\Eppo\Events\EntryStored;
 use Atlasflow\Eppo\Events\StaleEntryServed;
 use Atlasflow\Eppo\Exceptions\EppoException;
+use Atlasflow\Eppo\Exceptions\MissingRecord;
 use Atlasflow\Eppo\Exceptions\NotFoundException;
 use Atlasflow\Eppo\Http\Endpoint;
 use Atlasflow\Eppo\Jobs\RefreshCacheEntry;
@@ -95,7 +96,7 @@ final class CacheManager
         try {
             return $this->fetchAndStore($endpoint);
         } catch (EppoException $e) {
-            if ($stale !== null && $this->servesStaleOnError() && ! $e instanceof NotFoundException) {
+            if ($stale !== null && $this->servesStaleOnError() && ! $e instanceof MissingRecord) {
                 $this->emit(new StaleEntryServed($endpoint, revalidating: false, becauseOfError: true));
 
                 return $this->unwrap($this->wrap($stale), $endpoint);
@@ -122,7 +123,7 @@ final class CacheManager
     {
         try {
             $payload = $this->transport->get($endpoint);
-        } catch (NotFoundException $e) {
+        } catch (MissingRecord $e) {
             if ($store && $this->enabled() && $this->cachesMisses()) {
                 $this->store($endpoint, null, 404);
             }

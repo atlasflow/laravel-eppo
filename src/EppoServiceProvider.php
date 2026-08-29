@@ -113,7 +113,12 @@ final class EppoServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        // No cache, no tables. The migrations only appear once the durable
+        // cache is switched on, so an application that does not use it never
+        // grows a table it did not ask for.
+        if ($this->durableCacheEnabled()) {
+            $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        }
 
         if ($this->app->runningInConsole()) {
             $this->publishes([
@@ -133,6 +138,15 @@ final class EppoServiceProvider extends ServiceProvider
                 CachePruneCommand::class,
             ]);
         }
+    }
+
+    private function durableCacheEnabled(): bool
+    {
+        /** @var Config $config */
+        $config = $this->app->make('config');
+
+        return (bool) $config->get('eppo.cache.enabled', false)
+            && (bool) $config->get('eppo.cache.durable.enabled', true);
     }
 
     /**

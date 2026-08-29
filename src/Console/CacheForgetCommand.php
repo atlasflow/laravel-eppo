@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace Atlasflow\Eppo\Console;
 
 use Atlasflow\Eppo\Cache\CacheManager;
+use Atlasflow\Eppo\Console\Concerns\RequiresCache;
 use Illuminate\Console\Command;
 
 final class CacheForgetCommand extends Command
 {
+    use RequiresCache;
+
     protected $signature = 'eppo:cache:forget
         {target? : An EPPO code, ISO country code or RPPO code to bust}
         {--resource= : Bust a resource instead, e.g. taxon.distribution or references.*}
@@ -18,6 +21,10 @@ final class CacheForgetCommand extends Command
 
     public function handle(CacheManager $cache): int
     {
+        if ($this->cacheIsOff($cache)) {
+            return self::FAILURE;
+        }
+
         if ($this->option('all')) {
             if (! $this->confirmToProceed()) {
                 return self::FAILURE;

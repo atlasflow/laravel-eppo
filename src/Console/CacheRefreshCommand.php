@@ -6,6 +6,7 @@ namespace Atlasflow\Eppo\Console;
 
 use Atlasflow\Eppo\Cache\CacheManager;
 use Atlasflow\Eppo\Cache\Models\EppoCacheEntry;
+use Atlasflow\Eppo\Console\Concerns\RequiresCache;
 use Atlasflow\Eppo\Exceptions\EppoException;
 use Atlasflow\Eppo\Http\Endpoint;
 use Illuminate\Console\Command;
@@ -18,6 +19,8 @@ use Illuminate\Console\Command;
  */
 final class CacheRefreshCommand extends Command
 {
+    use RequiresCache;
+
     protected $signature = 'eppo:cache:refresh
         {--resource= : Only refresh this resource, e.g. taxon.distribution or taxon.*}
         {--subject= : Only refresh entries for this code}
@@ -28,6 +31,10 @@ final class CacheRefreshCommand extends Command
 
     public function handle(CacheManager $cache): int
     {
+        if ($this->cacheIsOff($cache)) {
+            return self::FAILURE;
+        }
+
         $query = EppoCacheEntry::query()->orderBy('stale_at');
 
         if (! $this->option('all')) {

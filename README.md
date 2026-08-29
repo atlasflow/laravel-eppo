@@ -80,6 +80,35 @@ $taxon->reportingArticles();
 $taxon->exists();                 // false for a code EPPO does not hold
 ```
 
+### The whole record at once
+
+EPPO writes prose datasheets for its quarantine pests, but API v2 does not expose them — `/infos` reports `datasheet: 1` and there is no route to fetch it. `datasheet()` assembles the equivalent from the endpoints that *are* exposed:
+
+```php
+$sheet = Eppo::taxon('XYLEFA')->datasheet();
+
+$sheet->name();                   // "Xylella fastidiosa"
+$sheet->kingdom();                // "Bacteria" — from the taxonomy, not a second call
+$sheet->rank();                   // "Species"
+$sheet->sections();               // which of the 14 sections carry records
+$sheet->counts();                 // how many records in each
+
+$sheet->hostsByClass();           // grouped, commonest group first
+$sheet->majorHosts();             // just the major ones
+$sheet->currentListings();        // regulatory listings not since withdrawn, by list
+$sheet->distributionByStatus();   // grouped by status code
+$sheet->namesByLanguage();
+$sheet->countries();
+```
+
+One `/infos` call up front says which sections have any records, and the empty ones are never requested. A taxon EPPO holds little about costs five calls rather than sixteen; `$sheet->fetched` tells you which ones it actually made. Narrow it further when you only need part:
+
+```php
+Eppo::taxon('BEMITA')->datasheet(['names', 'distribution', 'hosts']);
+```
+
+Two caveats, both upstream. `documents` is counted but the endpoint returns `[]` for every code tried. And `/infos` counts five more things — `expertise`, `specimens`, `eppolinks`, `pathwaypest`, `pathwayhost` — that have no route at all in v2, so they are reported in `$sheet->infos` and nowhere else.
+
 A deprecated code tells you so:
 
 ```php

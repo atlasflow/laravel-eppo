@@ -7,6 +7,7 @@ namespace Atlasflow\Eppo\Resources;
 use Atlasflow\Eppo\Cache\CacheManager;
 use Atlasflow\Eppo\Data\BiologicalControlAgent;
 use Atlasflow\Eppo\Data\Categorization;
+use Atlasflow\Eppo\Data\Datasheet;
 use Atlasflow\Eppo\Data\Distribution;
 use Atlasflow\Eppo\Data\Document;
 use Atlasflow\Eppo\Data\HostPest;
@@ -21,6 +22,7 @@ use Atlasflow\Eppo\Data\TaxonomyItem;
 use Atlasflow\Eppo\Data\Vector;
 use Atlasflow\Eppo\Exceptions\NotFoundException;
 use Atlasflow\Eppo\Support\Code;
+use Closure;
 use Illuminate\Support\Collection;
 
 /**
@@ -181,6 +183,66 @@ final class TaxonResource extends Resource
     public function reportingArticles(): Collection
     {
         return $this->collect($this->fetch('reporting_articles', 'reporting_articles'), ReportingArticle::fromArray(...));
+    }
+
+    /**
+     * Everything EPPO holds about this taxon, in one record.
+     *
+     * EPPO writes prose datasheets for its quarantine pests but API v2 does
+     * not expose them, so this assembles the equivalent from the endpoints it
+     * does expose. One `/infos` call up front says which sections have any
+     * records at all, and the empty ones are never requested — a taxon EPPO
+     * holds little about costs five calls rather than sixteen.
+     *
+     * @param  list<string>|null  $sections  limit to these; null means all
+     */
+    public function datasheet(?array $sections = null): Datasheet
+    {
+        $wanted = $sections === null
+            ? Datasheet::SECTIONS
+            : array_values(array_intersect(Datasheet::SECTIONS, $sections));
+
+        $overview = $this->overview();
+        $infos = $this->infos();
+
+        $fetched = [];
+
+        /**
+         * @param  int|null  $available  record count from /infos; null when the
+         *                               endpoint has no counter, 0 to skip
+         * @param  Closure(): Collection<int, covariant object>  $fetch
+         * @return Collection<int, covariant object>
+         */
+        $section = function (string $name, ?int $available, Closure $fetch) use ($wanted, &$fetched): Collection {
+            if (! in_array($name, $wanted, true) || $available === 0) {
+                return new Collection;
+            }
+
+            $fetched[] = $name;
+
+            return $fetch();
+        };
+
+        return new Datasheet(
+            taxon: $overview,
+            infos: $infos,
+            taxonomy: $section('taxonomy', null, $this->taxonomy(...)),
+            names: $section('names', null, $this->names(...)),
+            categorization: $section('categorization', $infos->categorization, $this->categorization(...)),
+            distribution: $section('distribution', $infos->distribution, $this->distribution(...)),
+            hosts: $section('hosts', $infos->hosts, $this->hosts(...)),
+            pests: $section('pests', $infos->pests, $this->pests(...)),
+            vectors: $section('vectors', $infos->vectorsPests, $this->vectors(...)),
+            vectorOf: $section('vectorof', $infos->vectorsHosts, $this->vectorOf(...)),
+            biologicalControlAgents: $section('bca', $infos->bca, $this->biologicalControlAgents(...)),
+            biologicalControlAgentOf: $section('bcaof', $infos->bcao, $this->biologicalControlAgentOf(...)),
+            // EPPO reports no count for standards, so this one is always asked.
+            standards: $section('standards', null, $this->standards(...)),
+            documents: $section('documents', $infos->documents, $this->documents(...)),
+            photos: $section('photos', $infos->photos, $this->photos(...)),
+            reportingArticles: $section('reporting', $infos->reporting, $this->reportingArticles(...)),
+            fetched: $fetched,
+        );
     }
 
     /**

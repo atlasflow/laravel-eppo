@@ -9,6 +9,11 @@ tools. Verified against the live API on 2026-08-29.
 ### Client
 
 - Typed readonly DTOs and `Collection`s for every response.
+- `Eppo::taxon($code)->datasheet()` assembles the whole record — taxonomy,
+  names, regulatory listings, distribution, hosts, vectors, standards, photos
+  and Reporting Service history — into one `Datasheet`, skipping every section
+  `/infos` reports as empty. EPPO's own prose datasheet is not exposed by
+  API v2; this covers the same ground from the endpoints that are.
 - Retries for 429/5xx honouring `retry_after`, failover to secondary servers,
   and a shared client-side throttle for the 2000 requests / 10 seconds per-IP
   limit.

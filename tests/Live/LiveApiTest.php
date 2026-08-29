@@ -133,6 +133,34 @@ it('reads reporting service articles for a taxon', function (): void {
         ->and($articles->first()->year)->toBeGreaterThan(2000);
 });
 
+it('assembles a full datasheet for a well-documented quarantine pest', function (): void {
+    $sheet = liveEppo()->taxon('XYLEFA')->datasheet();
+
+    expect($sheet->name())->toBe('Xylella fastidiosa')
+        ->and($sheet->kingdom())->toBe('Bacteria')
+        ->and($sheet->rank())->toBe('Species')
+        ->and($sheet->sections())->toContain(
+            'taxonomy', 'names', 'categorization', 'distribution', 'hosts',
+            'vectors', 'standards', 'photos', 'reporting',
+        )
+        ->and($sheet->hosts->count())->toBeGreaterThan(500)
+        ->and($sheet->majorHosts()->pluck('prefname'))->toContain('Olea europaea')
+        ->and($sheet->currentListings()->keys())->toContain('A1 list', 'A2 list')
+        ->and($sheet->countries()->count())->toBeGreaterThan(30)
+        ->and($sheet->vectors->count())->toBeGreaterThan(20)
+        ->and($sheet->namesByLanguage()->keys())->toContain('en', 'fr', 'la');
+})->group('slow');
+
+it('skips the sections EPPO reports as empty', function (): void {
+    // A plant, so no pests-of-it, no vectors, no biological control agents.
+    $sheet = liveEppo()->taxon('PHNFR')->datasheet();
+
+    expect($sheet->name())->toBe('Photinia x fraseri')
+        ->and($sheet->fetched)->not->toContain('vectors', 'vectorof', 'bca', 'bcaof')
+        ->and($sheet->vectors)->toBeEmpty()
+        ->and($sheet->taxonomy->count())->toBeGreaterThan(5);
+});
+
 it('reads a country with its subdivisions', function (): void {
     $france = liveEppo()->country('FR')->overview();
 

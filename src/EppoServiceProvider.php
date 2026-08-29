@@ -23,6 +23,7 @@ use Illuminate\Contracts\Bus\Dispatcher as BusDispatcher;
 use Illuminate\Contracts\Cache\Factory as CacheFactory;
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\Foundation\CachesConfiguration;
 use Illuminate\Database\DatabaseManager;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\ServiceProvider;
@@ -138,6 +139,50 @@ final class EppoServiceProvider extends ServiceProvider
                 CachePruneCommand::class,
             ]);
         }
+    }
+
+    /**
+     * Laravel's own mergeConfigFrom is a shallow array_merge, so an
+     * application that sets `eppo.cache.enabled` from a bootstrapper that runs
+     * before this provider would silently replace the whole `cache` block —
+     * losing every TTL, the L1 settings and the table names, with no error.
+     * Merge nested associative arrays instead.
+     *
+     * @param  string  $path
+     * @param  string  $key
+     */
+    protected function mergeConfigFrom($path, $key): void
+    {
+        if ($this->app instanceof CachesConfiguration && $this->app->configurationIsCached()) {
+            return;
+        }
+
+        /** @var Config $config */
+        $config = $this->app->make('config');
+
+        /** @var array<string, mixed> $packaged */
+        $packaged = require $path;
+
+        $config->set($key, $this->mergeConfigRecursively($packaged, (array) $config->get($key, [])));
+    }
+
+    /**
+     * @param  array<array-key, mixed>  $packaged
+     * @param  array<array-key, mixed>  $application
+     * @return array<array-key, mixed>
+     */
+    private function mergeConfigRecursively(array $packaged, array $application): array
+    {
+        foreach ($application as $key => $value) {
+            $packaged[$key] = is_array($value)
+                && ! array_is_list($value)
+                && isset($packaged[$key])
+                && is_array($packaged[$key])
+                    ? $this->mergeConfigRecursively($packaged[$key], $value)
+                    : $value;
+        }
+
+        return $packaged;
     }
 
     private function durableCacheEnabled(): bool
